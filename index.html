@@ -1906,9 +1906,8 @@
     // ── API helpers ────────────────────────────────────────────
     const isConfigured = () => SCRIPT_URL && SCRIPT_URL !== 'PEGA_AQUI_TU_URL_DEL_APPS_SCRIPT';
 
-    // ── API helpers — JSONP puro ─────────────────────────────────────
-    function apiGet(params) {
-      if (!isConfigured()) return Promise.resolve(null);
+    // ── API helpers — proxy en Vercel (iOS compatible) ──────────────
+    function _jsonp(params) {
       return new Promise((resolve) => {
         const cb = 'cb_' + Date.now() + '_' + Math.floor(Math.random()*99999);
         const timer = setTimeout(() => { delete window[cb]; document.getElementById(cb)?.remove(); resolve(null); }, 12000);
@@ -1921,8 +1920,7 @@
       });
     }
 
-    function apiPost(body) {
-      if (!isConfigured()) return Promise.resolve({ok:false,error:'Sin configurar'});
+    function _jsonpPost(body) {
       return new Promise((resolve) => {
         const cb = 'cb_' + Date.now() + '_' + Math.floor(Math.random()*99999);
         const timer = setTimeout(() => { delete window[cb]; document.getElementById(cb)?.remove(); resolve({ok:false,error:'Timeout'}); }, 15000);
@@ -1934,6 +1932,29 @@
         s.onerror = () => { clearTimeout(timer); delete window[cb]; s.remove(); resolve({ok:false,error:'Error de red'}); };
         document.head.appendChild(s);
       });
+    }
+
+    async function apiGet(params) {
+      if (!isConfigured()) return null;
+      if (window.location.protocol === 'https:') {
+        try {
+          const r = await fetch('/proxy?' + new URLSearchParams(params));
+          return await r.json();
+        } catch(e) { return _jsonp(params); }
+      }
+      return _jsonp(params);
+    }
+
+    async function apiPost(body) {
+      if (!isConfigured()) return {ok:false,error:'Sin configurar'};
+      if (window.location.protocol === 'https:') {
+        try {
+          const encoded = encodeURIComponent(JSON.stringify(body));
+          const r = await fetch('/proxy?method=POST&data=' + encoded);
+          return await r.json();
+        } catch(e) { return _jsonpPost(body); }
+      }
+      return _jsonpPost(body);
     }
 
     // ── Estado de conexión ─────────────────────────────────────
